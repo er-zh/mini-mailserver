@@ -120,7 +120,8 @@ class MailParser():
             assert self._stream[0].isalpha()
             self._shift()
 
-            self._parse_let_dig_str()
+            if len(self._stream) != 0 and self._stream[0].isalnum():
+                self._parse_let_dig_str()
         except (AssertionError, IndexError):
             self._fail_parse('element')
             return
@@ -134,7 +135,7 @@ class MailParser():
             while self._stream[0].isalnum():
                 self._shift()
         except (AssertionError, IndexError):
-            self._fail_parse('string')
+            self._fail_parse('element')
             return
 
     def _fail_parse(self, badtoken):
@@ -161,4 +162,3 @@ if __name__ == "__main__":
                 print('Sender ok')
             else:
                 print(f'ERROR -- {parser.bad_token}')
-                print(f'Residue: {parser.remainder}')
