@@ -155,7 +155,7 @@ if __name__ == "__main__":
     with open(0) as stdin:
         for usrinput in stdin:
             # TODO echo the user input but remove the extra newline (if present?)
-            print(usrinput[:-1])
+            print(usrinput[:-1] if usrinput[:-1] == '\n' else usrinput)
             parser.parse(usrinput)
 
             if parser.status == 0:

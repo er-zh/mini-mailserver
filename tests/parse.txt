@@ -13,10 +13,13 @@ MAIL FROM:<<<<<><><><><<<this should fail>
 MAIL FROM: <failure@
 MAIL FROM:<person@f.in.the.chat
 MAIL FROM:<pers()n@domain.domain>
+MAIL FROM:<pers[]n@domain.net>
 MAIL FROM:<fa;ls@live.unc.edu>
+MAIL FROM:<fa:ls@live.unc.edu>
 MAIL FROM: <person,@fail>
-MAIL FROM:<real.person@fail>
+MAIL FROM:<fake.person@fail>
 MAIL FROM:<fa|<e_person@fails>
+MAIL FROM:<fake_"person"@fails>
 MAIL FROM: <person@f@il.domain>
 MAIL FROM: <person@1fail.com>
 MAIL FROM:<erzh@ad.unc.edu>
@@ -25,6 +28,15 @@ MAIL     FROM:  <erzh@live.unc.edu>
 MAIL    FROM:<erzh@live.unc.edu>     
 MAIL FROM:     <erzh@live.unc.edu>
 MAIL FROM: <erzh@comp431>
-MAIL FROM: <!!!!!@comp431.ok>
-MAIL FROM:<erzh@a.whole.lot.of.elements>
-MAIL FROM:  <what?@is.this>
+MAIL FROM: <erzh@comp431.fa21>
+MAIL FROM:<erzh@a.whole.lot.of.domain.elements>
+MAIL FROM:<erzh@ALL.CAPS>
+MAIL FROM: <!!!!!@symbols>
+MAIL FROM: <erzh?@symbols>
+MAIL FROM: <er-zh@symbols>
+MAIL FROM: <er_zh@symbols>
+MAIL FROM: <***erzh***@symbols>
+MAIL FROM: <er12345zh@numbers>
+MAIL FROM: <erzh654321@gmail.com>
+MAIL FROM: <31415@hot.mail>
+MAIL FROM: <fails@no.CR.LF>
