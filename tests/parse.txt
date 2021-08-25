@@ -22,6 +22,7 @@ MAIL FROM:<fa|<e_person@fails>
 MAIL FROM:<fake_"person"@fails>
 MAIL FROM: <person@f@il.domain>
 MAIL FROM: <person@1fail.com>
+MAIL FROM: <fail@fail.>
 MAIL FROM:<erzh@ad.unc.edu>
 MAIL    FROM:     <erzh@live.unc.edu>
 MAIL     FROM:  <erzh@live.unc.edu>
