@@ -11,15 +11,12 @@ class MailParser():
         self._stream = '' # holds remaining unparsed portion of the input string
         self._invalid_chars = {' ', '\t', '<', '>', '(', ')', '[', ']', '\\', '.', ',', ';', ':', '@', '"'}
 
-    def parse(self, inputstr):
-        self._stream = inputstr
-        self.bad_token = ''
-        self.status = 0
-
-        self._parse_mail_from_cmd()
-
-    def _parse_mail_from_cmd(self):
+    def parse_mail_from_cmd(self, inputstr):
+        # parses a mail from command
         # <mail-from-cmd> --> MAIL<whitespace>FROM:<nullspace><reverse-path><nullspace><CRLF>
+
+        self._start_parse(inputstr)
+
         try:
             assert self._stream[:4] == 'MAIL'
             self._shift(4)
@@ -35,10 +32,64 @@ class MailParser():
 
             self._parse_nullspace()
 
+            # handles <CRLF> prod
             assert self._stream[0] == '\n'
         except (AssertionError, IndexError):
             self._fail_parse('mail-from-cmd')
             return
+    
+    # ###### public functions for parsing user input ######
+
+    def parse_rcpt_to_cmd(self, inputstr):
+        # parses a rcpt to cmd
+        # <rcpt-to-cmd> --> RCPT<whitespace>TO:<nullspace><forward-path><nullspace><CRLF>
+
+        self._start_parse(inputstr)
+
+        try:
+            assert self._stream[:4] == 'RCPT'
+            self._shift(4)
+
+            self._parse_whitespace()
+
+            assert self._stream[:3] == 'TO:'
+            self._shift(3)
+
+            self._parse_nullspace()
+
+            self._parse_path()
+
+            self._parse_nullspace()
+
+            assert self._stream[0] == '\n'
+        except (AssertionError, IndexError):
+            self._fail_parse('rcpt-to-cmd')
+            return
+    
+    def parse_data_cmd(self, inputstr):
+        # parses only the data command
+        # does not deal with the data that follows
+        # <data-cmd> --> DATA<nullspace><CRLF>
+
+        self._start_parse(inputstr)
+
+        try:
+            assert self._stream[:4] == 'DATA'
+            self._shift(4)
+
+            self._parse_nullspace()
+
+            assert self._stream[0] == '\n'
+        except (AssertionError, IndexError):
+            self._fail_parse('data-cmd')
+            return
+    
+    # ###### private helper functions ######
+
+    def _start_parse(self, inputstr):
+        self._stream = inputstr
+        self.bad_token = ''
+        self.status = 0
 
     def _parse_whitespace(self): # handles checking for <SP> as well
         # <whitespace> --> <SP>(<null>|<whitespace>)
@@ -61,7 +112,8 @@ class MailParser():
 
     def _parse_path(self):
         # <path> --> <<mailbox>>
-        # <reverse-path> prod rule seems like an alias for <path> so this handles both rules
+        # both <reverse-path> and <forward-path> prod rules seem like aliases for
+        # <path> so this handles both rules
         try:
             assert self._stream[0] == '<'
             self._shift()
@@ -156,9 +208,12 @@ if __name__ == "__main__":
         for usrinput in stdin:
             # TODO echo the user input but remove the extra newline if present
             print(usrinput[:-1] if usrinput[-1] == '\n' else usrinput)
-            parser.parse(usrinput)
+            parser.parse_mail_from_cmd(usrinput)
 
             if parser.status == 0:
-                print('Sender ok')
+                print('250 OK')
             else:
-                print(f'ERROR -- {parser.bad_token}')
+                if parser.bad_token[-3:] == 'cmd':
+                    print('500 Syntax error: command unrecognized')
+                else:
+                    print('501 Syntax error in parameters or arguments')
