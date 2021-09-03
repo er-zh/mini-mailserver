@@ -200,54 +200,10 @@ class CMDParser():
     def _shift(self, n=1):
         self._stream = self._stream[n:]
 
-
-class CLI_loop():
-    def __init__(self, input_stream):
-        self.parser = CMDParser()
-        self.cmdinput = input_stream
-
-    def run(self):
-        # starts the state machine
-        # entry state is reading for MAIL FROM cmds
-
-        self._expect_mailf()
-        
-
-    def _expect_mailf(self):
-        cmd = self.cmdinput.readline()
-
-        # TODO when is the user allowed to exit with ctrl-D
-        # only at mail-from or elsewhere as well?
-        if cmd == '':
-            return
-        
-        self._echo(cmd)
-        self.parser.parse_mail_from_cmd(cmd)
-
-        if parser.status == 0:
-            print('250 OK')
-            self._expect_rcpt()
-        else:
-            if parser.bad_token[-3:] == 'cmd':
-                print('500 Syntax error: command unrecognized')
-            else:
-                print('501 Syntax error in parameters or arguments')
-
-    def _expect_rcpt(self):
-        cmd = self.cmdinput.readline()
-
-        self._echo(cmd)
-        self.parser.parse_rcpt_to_cmd(cmd)
-
-    
-    def _echo(self, line):
-        print(line[:-1] if line[-1] == '\n' else line)
-
 if __name__ == "__main__":
     parser = CMDParser()
 
     with open(0) as stdin:
-
         print('debug')
         for usrinput in stdin:
             # echo the user input but remove the extra newline if present
