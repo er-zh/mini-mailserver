@@ -225,7 +225,8 @@ class CLI_loop():
         self.parser.parse_mail_from_cmd(cmd)
 
         if parser.status == 0:
-                self._expect_rcpt()
+            print('250 OK')
+            self._expect_rcpt()
         else:
             if parser.bad_token[-3:] == 'cmd':
                 print('500 Syntax error: command unrecognized')
