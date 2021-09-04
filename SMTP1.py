@@ -8,11 +8,12 @@ class CLI_loop():
     def __init__(self, input_stream):
         self.parser = CMDParser()
         self.cmdinput = input_stream
+        self.fpath = []
 
     def run(self):
         # starts the state machine
         # entry state is reading for MAIL FROM cmds
-
+        self.fpath = []
         self._expect_mailf()
         
 
@@ -43,6 +44,7 @@ class CLI_loop():
         self.parser.parse_rcpt_to_cmd(cmd)
 
         if self.parser.status == 0:
+            self.fpath.append(self._get_path(cmd))
             print('250 OK')
 
             # check for more recipients following the first
@@ -53,12 +55,14 @@ class CLI_loop():
                 self.parser.parse_rcpt_to_cmd(cmd)
 
                 if self.parser.status == 0:
+                    self.fpath.append(self._get_path(cmd))
                     print('250 OK')
                 else:
                     # when the rcpt parse fails, check for data
                     self.parser.parse_data_cmd(cmd)
 
                     if self.parser.status == 0:
+                        # print intermediate response
                         print('354 Start mail input; end with <CRLF>.<CRLF>')
                         self._expect_data()
                         return
@@ -70,7 +74,17 @@ class CLI_loop():
     
     # used for parsing the data of the email itself and not the data cmd
     def _expect_data(self):
-        print('arrived')
+        print(self.fpath)
+        '''
+        for text in self.cmdinput:
+            # end of input indicated
+            if text == '.\n':
+                break
+        '''
+
+    # takes a syntactically valid command and extracts the path
+    def _get_path(self, cmd):
+        return cmd[cmd.find('<')+1:cmd.find('>')]
     
     def _echo(self, line):
         print(line[:-1] if line[-1] == '\n' else line)
