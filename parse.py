@@ -4,19 +4,35 @@
 
 class CMDParser():
     def __init__(self):
-        self.status = 0 # any non-zero value represents parse failure
+        self.status = 0 # any non-positive value represents parse failure
         self.bad_token = ''
         self.remainder = ''
 
         self._stream = '' # holds remaining unparsed portion of the input string
         self._invalid_chars = {' ', '\t', '<', '>', '(', ')', '[', ']', '\\', '.', ',', ';', ':', '@', '"'}
 
-    def parse_mail_from_cmd(self, inputstr):
-        # parses a mail from command
-        # <mail-from-cmd> --> MAIL<whitespace>FROM:<nullspace><reverse-path><nullspace><CRLF>
+    
+    # ###### public functions for parsing user input ######
 
+    def parse(self, inputstr):
         self._start_parse(inputstr)
 
+        try:
+            if self._stream[0] == "M":
+                self._parse_mail_from_cmd()
+            elif self._stream[0] == "R":
+                self.status = 1
+                self._parse_rcpt_to_cmd()
+            else:
+                self.status = 2
+                self._parse_data_cmd()
+        except IndexError:
+            self._fail_parse("empty-cmd")
+            return
+
+    def _parse_mail_from_cmd(self):
+        # parses a mail from command
+        # <mail-from-cmd> --> MAIL<whitespace>FROM:<nullspace><reverse-path><nullspace><CRLF>
         try:
             assert self._stream[:4] == 'MAIL'
             self._shift(4)
@@ -37,14 +53,10 @@ class CMDParser():
         except (AssertionError, IndexError):
             self._fail_parse('mail-from-cmd')
             return
-    
-    # ###### public functions for parsing user input ######
 
-    def parse_rcpt_to_cmd(self, inputstr):
+    def _parse_rcpt_to_cmd(self):
         # parses a rcpt to cmd
         # <rcpt-to-cmd> --> RCPT<whitespace>TO:<nullspace><forward-path><nullspace><CRLF>
-
-        self._start_parse(inputstr)
 
         try:
             assert self._stream[:4] == 'RCPT'
@@ -66,12 +78,10 @@ class CMDParser():
             self._fail_parse('rcpt-to-cmd')
             return
     
-    def parse_data_cmd(self, inputstr):
+    def _parse_data_cmd(self):
         # parses only the data command
         # does not deal with the data that follows
         # <data-cmd> --> DATA<nullspace><CRLF>
-
-        self._start_parse(inputstr)
 
         try:
             assert self._stream[:4] == 'DATA'
@@ -146,7 +156,6 @@ class CMDParser():
             assert self._stream[0] not in self._invalid_chars
             self._shift()
 
-            # TODO are newlines allowed?
             while self._stream[0] not in self._invalid_chars:
                 self._shift()
         except (AssertionError, IndexError):
@@ -194,7 +203,7 @@ class CMDParser():
         if self.bad_token == '':
             self.bad_token = badtoken
             self.remainder = self._stream
-        self.status = 1
+        self.status = -1
     
     # removes the first n characters of the input string
     def _shift(self, n=1):
@@ -208,7 +217,7 @@ if __name__ == "__main__":
         for usrinput in stdin:
             # echo the user input but remove the extra newline if present
             print(usrinput[:-1] if usrinput[-1] == '\n' else usrinput)
-            parser.parse_rcpt_to_cmd(usrinput)
+            parser.parse(usrinput)
 
             if parser.status == 0:
                 print('250 OK')
