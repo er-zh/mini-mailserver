@@ -29,7 +29,7 @@ class CLI_loop():
         self._echo(cmd)
         self.parser.parse(cmd)
 
-        if self.parser.status == 0:
+        if self.parser.status == 0 and self.parser.cmd == 0:
             self.buffer.append(cmd)
             print('250 OK')
             self._expect_rcpt()
