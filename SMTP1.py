@@ -13,17 +13,16 @@ class CLI_loop():
 
     def run(self):
         # starts the state machine
-        # entry state is reading for MAIL FROM cmds
-        self.fpath = []
-        self.buffer = []
+        # entry state is reading for MAIL FROM cmd
         while(self._expect_mailf() == 0):
             pass
         
     def _expect_mailf(self):
+        self.fpath = []
+        self.buffer = []
+        
         cmd = self.cmdinput.readline()
 
-        # TODO when is the user allowed to exit with ctrl-D
-        # only at mail-from or elsewhere as well?
         if cmd == '':
             return -2
         
@@ -35,14 +34,13 @@ class CLI_loop():
             print('250 OK')
             self._expect_rcpt()
         else:
-            if self.parser.status > 0:
-                print("503 Bad sequence of commands")
-            elif self.parser.bad_token[-3:] == 'cmd':
+            if self.parser.bad_token[-3:] == 'cmd':
                 print('500 Syntax error: command unrecognized')
+            elif self.parser.cmd != 0:
+                print("503 Bad sequence of commands")
             else:
                 print('501 Syntax error in parameters or arguments')
-            
-            return -1
+    
         return 0
 
     def _expect_rcpt(self):
@@ -51,35 +49,35 @@ class CLI_loop():
         self._echo(cmd)
         self.parser.parse(cmd)
 
-        if self.parser.status == 1:
+        if self.parser.status == 0 and self.parser.cmd == 1:
             self.buffer.append(cmd)
             self.fpath.append(self._get_path(cmd))
             print('250 OK')
 
             # check for more recipients following the first
-            while(self.parser.status == 1):
+            while(self.parser.status == 0):
                 cmd = self.cmdinput.readline()
 
                 self._echo(cmd)
                 self.parser.parse(cmd)
 
-                if self.parser.status == 1:
-                    self.buffer.append(cmd)
-                    self.fpath.append(self._get_path(cmd))
-                    print('250 OK')
-                # when the rcpt parse fails, check for data
-                elif self.parser.status == 2:
-                    # print intermediate response
-                    print('354 Start mail input; end with <CRLF>.<CRLF>')
-                    self._expect_data()
-                    return
+                if self.parser.status == 0:
+                    if self.parser.cmd == 1:
+                        self.buffer.append(cmd)
+                        self.fpath.append(self._get_path(cmd))
+                        print('250 OK')
+                    # when the rcpt parse fails, check for data
+                    elif self.parser.cmd == 2:
+                        # print intermediate response
+                        print('354 Start mail input; end with <CRLF>.<CRLF>')
+                        self._expect_data()
+                        return
 
-        if self.parser.status >= 0:
-            print("503 Bad sequence of commands")
-        elif self.parser.bad_token[-3:] == 'cmd':
+        if self.parser.bad_token[-3:] == 'cmd':
             print('500 Syntax error: command unrecognized')
+        elif self.parser.cmd >= 0:
+            print("503 Bad sequence of commands")
         else:
-            print(self.parser.remainder)
             print('501 Syntax error in parameters or arguments')
     
     # used for parsing the data of the email itself and not the data cmd

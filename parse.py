@@ -4,7 +4,8 @@
 
 class CMDParser():
     def __init__(self):
-        self.status = 0 # any non-positive value represents parse failure
+        self.status = 0 # any non-zero value represents parse failure
+        self.cmd = 0
         self.bad_token = ''
         self.remainder = ''
 
@@ -21,10 +22,10 @@ class CMDParser():
             if self._stream[0] == "M":
                 self._parse_mail_from_cmd()
             elif self._stream[0] == "R":
-                self.status = 1
+                self.cmd = 1
                 self._parse_rcpt_to_cmd()
             else:
-                self.status = 2
+                self.cmd = 2
                 self._parse_data_cmd()
         except IndexError:
             self._fail_parse("empty-cmd")
@@ -100,6 +101,7 @@ class CMDParser():
         self._stream = inputstr
         self.bad_token = ''
         self.status = 0
+        self.cmd = 0
 
     def _parse_whitespace(self): # handles checking for <SP> as well
         # <whitespace> --> <SP>(<null>|<whitespace>)
@@ -111,7 +113,7 @@ class CMDParser():
             while self._stream[0] == ' ' or self._stream[0] == '\t':
                 self._shift()
         except (AssertionError, IndexError):
-            self._fail_parse('whitespace')
+            self._fail_parse('whitespace-cmd')
             return
 
     def _parse_nullspace(self):
