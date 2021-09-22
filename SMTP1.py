@@ -22,15 +22,12 @@ class CLI_loop():
         self.buffer = []
         
         cmd = self.cmdinput.readline()
-
-        if cmd == '':
-            return -2
         
         self._echo(cmd)
         self.parser.parse(cmd)
 
         if self.parser.status == 0 and self.parser.cmd == 0:
-            self.buffer.append(cmd)
+            self.buffer.append(f'From: <{self._get_path(cmd)}>\n')
             print('250 OK')
             self._expect_rcpt()
         else:
@@ -50,7 +47,7 @@ class CLI_loop():
         self.parser.parse(cmd)
 
         if self.parser.status == 0 and self.parser.cmd == 1:
-            self.buffer.append(cmd)
+            self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
             self.fpath.append(self._get_path(cmd))
             print('250 OK')
 
@@ -63,7 +60,7 @@ class CLI_loop():
 
                 if self.parser.status == 0:
                     if self.parser.cmd == 1:
-                        self.buffer.append(cmd)
+                        self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
                         self.fpath.append(self._get_path(cmd))
                         print('250 OK')
                     # when the rcpt parse fails, check for data
@@ -71,6 +68,10 @@ class CLI_loop():
                         # print intermediate response
                         print('354 Start mail input; end with <CRLF>.<CRLF>')
                         self._expect_data()
+                        return
+                    # mail from command recieved
+                    else:
+                        print("503 Bad sequence of commands")
                         return
 
         if self.parser.bad_token[-3:] == 'cmd':
@@ -82,19 +83,24 @@ class CLI_loop():
     
     # used for parsing the data of the email itself and not the data cmd
     def _expect_data(self):
+        acc = False
         for text in self.cmdinput:
             self._echo(text)
             if text == '.\n':
+                acc = True
                 break
             else:
                 self.buffer.append(text)
         
-        print('250 OK')
+        if(acc is True):
+            print('250 OK')
 
-        for path in self.fpath:
-            # open or create a file for each path specified in RCPT TO
-            with open(f'forward/{path}', "a") as fout:
-                fout.writelines(self.buffer)
+            for path in self.fpath:
+                # open or create a file for each path specified in RCPT TO
+                with open(f'forward/{path}', "a") as fout:
+                    fout.writelines(self.buffer)
+        else:
+            exit(0)
 
     # takes a syntactically valid command and extracts the path
     def _get_path(self, cmd):
@@ -103,6 +109,9 @@ class CLI_loop():
     def _echo(self, line):
         if line != "":
             print(line[:-1] if line[-1] == '\n' else line)
+        # eof inputted exit
+        else:
+            exit(0)
 
 if __name__ == "__main__":
     with open(0) as stdin:
