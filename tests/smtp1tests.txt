@@ -1,0 +1,60 @@
+MAIL FROM: <jeffay@cs.unc.edu>
+RCPT TO: <test_01_noah@live.unc.edu>
+RCPT TO: <test_01_noah@live.unc.edu>
+DATA
+This is test message 1
+.
+MAIL    FROM: <jeffay@cs.unc.edu>
+RCPT    TO: <test_02_crisingc@live.unc.edu>
+RCPT    TO: <test_02_noahj98@live.unc.edu>
+DATA    
+This is test message 2.
+This is a multiline test.
+.
+MAIL    FROM: <jeffay@cs.unc.edu>
+RCPT    TO: <test_03_crisingc@live.unc.edu>
+RCPT    TO: <test_03_noahj98@live.unc.edu>
+RCPT    TO: <test_03_alice@cs.unc.edu>
+DATA    
+This is test message 3.
+test
+test
+test
+.
+MAIL        FROM: <jeffay@cs.unc.edu>
+RCPT        TO: <test_04_crisingc@live.unc.edu>
+DATA        
+This is test message 4
+a
+a
+..
+a
+.
+MAIL        FROM: <jeffay@cs.unc.edu>
+RCPT        TO: <test_05_crisingc@live.unc.edu>
+RCPT        TO: <test_05_noahj98@cs.unc.edu>
+DATA        
+This is test message 5
+
+
+.
+MAIL FROM:<test_20_1@cs.unc.edu>
+MAIL FROM:<test_20_2@cs.unc.edu>
+ .
+DATA
+ .
+MAIL FROM <test_20_3@cs.unc.edu>
+
+ .
+MAIL FROM:<test_20_3@cs.unc.edu>
+RCPT TO:<test_20_4@cs.unc.edu>
+RCPT TO:<test_20_5@cs.unc.edu>
+MAIL FROM:<test_20_4@cs.unc.edu>
+MAIL FROM:<test_20_5@cs.unc.edu>
+RCPT TO:<test_20_6@cs.unc.edu>
+DATA
+YAT - Yet Another
+Test
+
+
+.
