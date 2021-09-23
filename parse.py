@@ -12,14 +12,12 @@ class CMDParser():
         self._stream = '' # holds remaining unparsed portion of the input string
         self._invalid_chars = {' ', '\t', '<', '>', '(', ')', '[', ']', '\\', '.', ',', ';', ':', '@', '"'}
 
-    
-    # ###### public functions for parsing user input ######
-
     def parse(self, inputstr):
         self._start_parse(inputstr)
 
         try:
             if self._stream[0] == "M":
+                self.cmd = 0
                 self._parse_mail_from_cmd()
             elif self._stream[0] == "R":
                 self.cmd = 1
@@ -30,6 +28,13 @@ class CMDParser():
         except IndexError:
             self._fail_parse("empty-cmd")
             return
+
+    # ###### private helper functions ######
+
+    def _start_parse(self, inputstr):
+        self._stream = inputstr
+        self.bad_token = ''
+        self.status = 0
 
     def _parse_mail_from_cmd(self):
         # parses a mail from command
@@ -94,14 +99,6 @@ class CMDParser():
         except (AssertionError, IndexError):
             self._fail_parse('data-cmd')
             return
-    
-    # ###### private helper functions ######
-
-    def _start_parse(self, inputstr):
-        self._stream = inputstr
-        self.bad_token = ''
-        self.status = 0
-        self.cmd = 0
 
     def _parse_whitespace(self): # handles checking for <SP> as well
         # <whitespace> --> <SP>(<null>|<whitespace>)
