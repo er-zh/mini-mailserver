@@ -2,95 +2,145 @@ from sys import argv, stderr
 
 MF = "mail from"
 RT = "rcpt to"
-ART = "extra rcpt to"
+ERT = "extra rcpt to"
 DATA = "data"
 ERR = "error"
+END = "done"
 
 class ClientLoop():
     def __init__(self, forwardfile, inputstream):
         self.ff = forwardfile
         self.input = inputstream
-        self.buffer = ''
+        self.cline = ''
+        self.eof_reached = False
 
         self.transition = {
             (MF, '250'):RT,
-            (RT, '250'):ART,
-            (ART, '250'):ART,
-            (ART, '354'):DATA,
-            (DATA, '250'):MF
+            (RT, '250'):ERT,
+            (ERT, '250'):ERT,
+            (ERT, '354'):DATA,
+            (DATA, '250'):MF,
+            (DATA, END):END,
+            # erroneous ack codes recieved
+            (MF, '500'):ERR,
+            (RT, '500'):ERR,
+            (ERT, '500'):ERR,
+            (DATA, '500'):ERR,
+            (MF, '501'):ERR,
+            (RT, '501'):ERR,
+            (ERT, '501'):ERR,
+            (DATA, '501'):ERR,
+            # once the end is reached there are
+            # no more states to transition into
+            (END, END):'',
+            (ERR, END):''
         }
+
         self.call = {
             MF:ClientLoop._send_mailto,
             RT:ClientLoop._send_rcptto,
-            ART:ClientLoop._send_additionalto,
-            DATA:ClientLoop._send_data
+            ERT:ClientLoop._send_ercptto,
+            DATA:ClientLoop._send_data,
+            END:ClientLoop._send_quit,
+            ERR:ClientLoop._send_quit
         }
+        # all states will perform some action corresponding to
+        # data read from the forwards file, then wait for an
+        # ack code
 
     def run(self):
         cstate = MF
         status = 0
         while status == 0:
-            status, rcode = self.call[cstate]()
+            status, rcode = self.call[cstate](self)
 
-            cstate = self.transition[(cstate, rcode)]
+            try:
+                cstate = self.transition[(cstate, rcode)]
+            except KeyError:
+                cstate = ERR
     
     # expects a well formed From: line in an email
     def _send_mailto(self):
-        line = self.ff.readline()
+        # only need to get the next line if nothing
+        # has been read yet
+        if self.cline == '':
+            self._advance_read()
 
-        if line[:5] == 'From:':
-            print('MAIL FROM:' + line[5:], end='')
+        if self.cline[:5] == 'From:':
+            print('MAIL FROM:' + self.cline[5:], end='')
 
-            ack = self.input.readline()
-            rcode = ack[:3] 
-
-            return (0, rcode)
+            return (0, self._get_ack())
         return (1, '')
 
     # expects a well formed To: line in an email
     # or can accept a data command
-    def _send_rcptto(self, line):
-        line = self.ff.readline()
+    def _send_rcptto(self):
+        self._advance_read()
 
-        if line[:3] == 'To:':
-            print('RCPT TO:'+ line[3:], end='')
+        if self.cline[:3] == 'To:':
+            print('RCPT TO:'+ self.cline[3:], end='')
 
-            ack = self.input.readline()
-            rcode = ack[:3]
-
-            return (0, rcode)
+            return (0, self._get_ack())
         return (1, '')
 
-    def _send_additionalto(self, line):
-        if line[:3] == 'To:':
-            print('RCPT TO:'+ line[3:], end='')
-
-            ack = self.input.readline()
-            rcode = ack[:3]
-
-            return (0, rcode)
+    def _send_ercptto(self):
+        self._advance_read()
+        got_rcpt = True
+        if self.cline[:3] == 'To:':
+            print('RCPT TO:'+ self.cline[3:], end='')
         else:
             print('DATA')
-            self.buffer = line
+            got_rcpt = False
+        
+        ack = self._get_ack()
+        if (got_rcpt and ack == '250') or (not got_rcpt and ack == '354'):
+            return (0, ack)
+        else:
+            return (1, ack)
 
-            ack = self.input.readline()
-            rcode = ack[:3]
+    def _send_data(self):
+        # does not need to advance read here
+        # bc email data was detected already but
+        # only a DATA command was issued
+        finished = True
+        while self.cline != '':
+            if self.cline[:5] == "From:":
+                finished = False
+                break
+            print(self.cline, end='')
+            self._advance_read()
+        
+        print('.')
+        # if the while loop is exitted with ''
+        # then EOF has been encountered
+        if finished:
+            self._get_ack()
+            return(0, END)
+        return (0, self._get_ack())
+    
+    def _send_quit(self):
+        print('QUIT')
 
-            return (0, rcode)
+        return (1, END)
+    
+    # read in the next input line
+    def _advance_read(self):
+        self.cline = self.ff.readline()
 
-    def _send_data(self, line):
-        if self.buffer != '':
-            print(line, end='')
-            self.buffer = ''
-        print(line, end='')
+    def _get_ack(self):
+        ack = self.input.readline()
+        errprint(ack)
+        return ack[:3]
 
 def errprint(line):
-    print(line, file=stderr)
+    # get rid of the '\n' at the end of a line of user input
+    print(line[:-1], file=stderr)
 
 if __name__ == "__main__":
-    # TODO do improper inputs need accounting
+    # TODO do improper inputs need accounting for
     if len(argv) < 2:
         # insufficient args recieved
+        print(argv)
         exit(1)
     else:
         forward_file = argv[1]
@@ -98,5 +148,8 @@ if __name__ == "__main__":
     try:
         with open(forward_file, 'r') as ff, open(0) as stdin:
             cli = ClientLoop(ff, stdin)
+
+            cli.run()
     except FileNotFoundError:
-        print('forward file not able to be located')
+        # file name arg does not refer to a finable file
+        exit(2)
