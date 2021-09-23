@@ -59,6 +59,7 @@ class ClientLoop():
             except KeyError:
                 cstate = ERR
     
+    # TODO how much of a garuntee is well formed?
     # expects a well formed From: line in an email
     def _send_mailto(self):
         # only need to get the next line if nothing
@@ -127,6 +128,7 @@ class ClientLoop():
     def _advance_read(self):
         self.cline = self.ff.readline()
 
+    # TODO what sort of ack codes can be sent? anything?
     def _get_ack(self):
         ack = self.input.readline()
         errprint(ack)
@@ -140,7 +142,6 @@ if __name__ == "__main__":
     # TODO do improper inputs need accounting for
     if len(argv) < 2:
         # insufficient args recieved
-        print(argv)
         exit(1)
     else:
         forward_file = argv[1]
