@@ -106,13 +106,23 @@ class ClientLoop():
         # bc email data was detected already but
         # only a DATA command was issued
         finished = True
+        badEOF = False
         while self.cline != '':
             if self.cline[:5] == "From:":
                 finished = False
                 break
             print(self.cline, end='')
+            
+            if self.cline[-1] != '\n':
+                badEOF = True
+            
             self._advance_read()
         
+        if badEOF:
+            assert self.cline == ''
+            print()
+            return(0, ERR)
+
         print('.')
         # if the while loop is exitted with ''
         # then EOF has been encountered
