@@ -59,7 +59,6 @@ class ClientLoop():
             except KeyError:
                 cstate = ERR
     
-    # TODO how much of a garuntee is well formed?
     # expects a well formed From: line in an email
     def _send_mailto(self):
         # only need to get the next line if nothing
@@ -94,10 +93,13 @@ class ClientLoop():
             got_rcpt = False
         
         ack = self._get_ack()
+        # need to manually identify that the correct ack has been recieved
+        # since the current state can't distinguish between whether it has successfully
+        # processed a data command or another rcpt to command
         if (got_rcpt and ack == '250') or (not got_rcpt and ack == '354'):
             return (0, ack)
         else:
-            return (1, ack)
+            return (0, END)
 
     def _send_data(self):
         # does not need to advance read here
@@ -128,18 +130,25 @@ class ClientLoop():
     def _advance_read(self):
         self.cline = self.ff.readline()
 
-    # TODO what sort of ack codes can be sent? anything?
     def _get_ack(self):
         ack = self.input.readline()
         errprint(ack)
-        return ack[:3]
+
+        # recieved ack code must have the correct number
+        # in addition to being a well-formed message
+        # ie must follow <code><whitespace><*><CRLF>
+        try:
+            if ack[3] == ' ' or ack[3] == '\t':
+                return ack[:3]
+        except IndexError:
+            pass
+        return ''
 
 def errprint(line):
     # get rid of the '\n' at the end of a line of user input
     print(line[:-1], file=stderr)
 
 if __name__ == "__main__":
-    # TODO do improper inputs need accounting for
     if len(argv) < 2:
         # insufficient args recieved
         exit(1)
@@ -152,5 +161,5 @@ if __name__ == "__main__":
 
             cli.run()
     except FileNotFoundError:
-        # file name arg does not refer to a finable file
+        # file name arg does not refer to a findable file
         exit(2)
