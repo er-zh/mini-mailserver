@@ -4,7 +4,7 @@
 
 from parse import CMDParser
 
-class CLI_loop():
+class ServerLoop():
     def __init__(self, input_stream):
         self.parser = CMDParser()
         self.cmdinput = input_stream
@@ -105,6 +105,9 @@ class CLI_loop():
     # takes a syntactically valid command and extracts the path
     def _get_path(self, cmd):
         return cmd[cmd.find('<')+1:cmd.find('>')]
+
+    def _get_domain(self, cmd):
+        return cmd[cmd.find('@')+1:]
     
     def _echo(self, line):
         if line != "":
@@ -115,5 +118,5 @@ class CLI_loop():
 
 if __name__ == "__main__":
     with open(0) as stdin:
-        cli = CLI_loop(stdin)
+        cli = ServerLoop(stdin)
         cli.run()

@@ -7,6 +7,14 @@ DATA = "data"
 ERR = "error"
 END = "done"
 
+CONNECTEST = '220'
+CMDOK = '250'
+DATAPENDING = '354'
+QUITREC = '221'
+BADCMD = '500'
+BADPARAM = '501'
+BADORDER = '503'
+
 class ClientLoop():
     def __init__(self, forwardfile, inputstream):
         self.ff = forwardfile
