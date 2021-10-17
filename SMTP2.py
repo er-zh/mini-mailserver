@@ -114,22 +114,13 @@ class ClientLoop():
         # bc email data was detected already but
         # only a DATA command was issued
         finished = True
-        badEOF = False
         while self.cline != '':
             if self.cline[:5] == "From:":
                 finished = False
                 break
             print(self.cline, end='')
             
-            if self.cline[-1] != '\n':
-                badEOF = True
-            
             self._advance_read()
-        
-        if badEOF:
-            assert self.cline == ''
-            print()
-            return(0, ERR)
 
         print('.')
         # if the while loop is exitted with ''
@@ -154,9 +145,9 @@ class ClientLoop():
 
         # recieved ack code must have the correct number
         # in addition to being a well-formed message
-        # ie must follow <code><whitespace><*><CRLF>
+        # ie must follow <code><whitespace><*+><CRLF>
         try:
-            if ack[3] == ' ' or ack[3] == '\t':
+            if (ack[3] == ' ' or ack[3] == '\t') and ack[4:-1] != '':
                 return ack[:3]
         except IndexError:
             pass
