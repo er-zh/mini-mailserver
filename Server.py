@@ -61,12 +61,12 @@ class ServerLoop():
 
             try:
                 cstate = self.transition[(cstate, rcode)]
-            except:
+            except KeyError:
                 # if a error is recieved go back to the mail from state
                 cstate = MF 
         
     def _expect_mailf(self):
-        self.fpath = []
+        self.fpath = set()
         self.buffer = []
         
         cmd = self.cmdinput.readline()
@@ -97,7 +97,7 @@ class ServerLoop():
 
         if self.parser.status == 0 and self.parser.cmd == 1:
             self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
-            self.fpath.append(self._get_domain(self._get_path(cmd)))
+            self.fpath.add(self._get_domain(self._get_path(cmd)))
             print('250 OK')
             
             return (0, CMDOK)
@@ -120,7 +120,7 @@ class ServerLoop():
         if self.parser.status == 0:
             if self.parser.cmd == 1:
                 self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
-                self.fpath.append(self._get_domain(self._get_path(cmd)))
+                self.fpath.add(self._get_domain(self._get_path(cmd)))
                 print('250 OK ')
                 return (0, CMDOK)
             # when the rcpt parse fails, check for data
@@ -157,7 +157,6 @@ class ServerLoop():
             print('250 OK')
 
             for path in self.fpath:
-                print(path)
                 # open or create a file for each path specified in RCPT TO
                 with open(f'forward/{path}', "a") as fout:
                     fout.writelines(self.buffer)
