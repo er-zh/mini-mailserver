@@ -3,6 +3,13 @@
 # PID: 730294463
 
 from parse import CMDParser
+import socket
+
+# constant port number
+# TODO reimplement as an argument
+PORTNUM = 8000 + 4463
+MAX_CONNECTION_REQS = 1
+BUFSIZE = 1024
 
 # constants labeling states
 WAIT = "waiting" # for a connection
@@ -25,10 +32,16 @@ BADORDER = '503'
 class ServerLoop():
     def __init__(self, input_stream):
         self.parser = CMDParser()
+
         self.cmdinput = input_stream
+
         self.fpath = set()
         self.buffer = []
         self.rcode = ''
+
+        self.sock = None
+        self.csock = None
+        self.addr = None
 
         self.transition = {
             (WAIT, CONNECTEST):MF,
@@ -43,6 +56,7 @@ class ServerLoop():
         }
 
         self.call = {
+            WAIT:ServerLoop._waitfor_connection,
             MF:ServerLoop._expect_mailf,
             RT:ServerLoop._expect_rcpt,
             ERT:ServerLoop._expect_ercpt,
@@ -50,10 +64,14 @@ class ServerLoop():
         }
 
     def run(self):
+        # creates a socket
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind(('', PORTNUM))
+        self.sock.listen(MAX_CONNECTION_REQS)
+
         # starts the state machine
         # entry state is reading for MAIL FROM cmd
-
-        cstate = MF
+        cstate = WAIT
         status = 0
 
         while status==0:
@@ -63,98 +81,108 @@ class ServerLoop():
                 cstate = self.transition[(cstate, rcode)]
             except KeyError:
                 # if a error is recieved go back to the mail from state
-                cstate = MF 
+                cstate = MF
         
+    def _waitfor_connection(self):
+        self.csock, self.addr = self.sock.accept()
+
+        self._so_sock('220 ' + socket.gethostname())
+
+        return (0, CONNECTEST)
+
     def _expect_mailf(self):
         self.fpath = set()
         self.buffer = []
         
-        cmd = self.cmdinput.readline()
-        
-        self._echo(cmd)
+        cmd = self._rf_sock()
+
         self.parser.parse(cmd)
 
         if self.parser.status == 0 and self.parser.cmd == 0:
             self.buffer.append(f'From: <{self._get_path(cmd)}>\n')
-            print('250 OK')
+            
+            self._so_sock('250 OK')
             # return transition to rcpt to state
             return (0, CMDOK)
         else:
             if self.parser.bad_token[-3:] == 'cmd':
-                print('500 Syntax error: command unrecognized')
+                self._so_sock('500 Syntax error: command unrecognized')
             elif self.parser.cmd != 0:
-                print("503 Bad sequence of commands")
+                self._so_sock("503 Bad sequence of commands")
             else:
-                print('501 Syntax error in parameters or arguments')
+                self._so_sock('501 Syntax error in parameters or arguments')
     
             return(0, ERR)
 
     def _expect_rcpt(self):
-        cmd = self.cmdinput.readline()
-
-        self._echo(cmd)
+        cmd = self._rf_sock()
+        
         self.parser.parse(cmd)
 
         if self.parser.status == 0 and self.parser.cmd == 1:
             self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
             self.fpath.add(self._get_domain(self._get_path(cmd)))
-            print('250 OK')
+            
+            self._so_sock('250 OK')
             
             return (0, CMDOK)
         else:
             if self.parser.bad_token[-3:] == 'cmd':
-                print('500 Syntax error: command unrecognized')
+                self._so_sock('500 Syntax error: command unrecognized')
             elif self.parser.cmd >= 0:
-                print("503 Bad sequence of commands")
+                self._so_sock("503 Bad sequence of commands")
             else:
-                print('501 Syntax error in parameters or arguments')
+                self._so_sock('501 Syntax error in parameters or arguments')
 
             return (0, ERR)
 
     def _expect_ercpt(self):
-        cmd = self.cmdinput.readline()
-
-        self._echo(cmd)
+        cmd = self._rf_sock()
+        
         self.parser.parse(cmd)
 
         if self.parser.status == 0:
             if self.parser.cmd == 1:
                 self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
                 self.fpath.add(self._get_domain(self._get_path(cmd)))
-                print('250 OK ')
+                
+                self._so_sock('250 OK ')
                 return (0, CMDOK)
             # when the rcpt parse fails, check for data
             elif self.parser.cmd == 2:
                 # print intermediate response
-                print('354 Start mail input; end with <CRLF>.<CRLF>')
+                self._so_sock('354 Start mail input; end with <CRLF>.<CRLF>')
                 return (0, DATAPENDING)
             # mail from command recieved
             else:
-                print("503 Bad sequence of commands")
+                self._so_sock("503 Bad sequence of commands")
                 return (0, ERR)
         else:
             if self.parser.bad_token[-3:] == 'cmd':
-                print('500 Syntax error: command unrecognized')
+                self._so_sock('500 Syntax error: command unrecognized')
             elif self.parser.cmd >= 0:
-                print("503 Bad sequence of commands")
+                self._so_sock("503 Bad sequence of commands")
             else:
-                print('501 Syntax error in parameters or arguments')
+                self._so_sock('501 Syntax error in parameters or arguments')
 
             return (0, ERR)
 
     # used for parsing the data of the email itself and not the data cmd
     def _expect_data(self):
         acc = False
-        for text in self.cmdinput:
+        text = self._rf_sock()
+        while text != '':
             self._echo(text)
             if text == '.\n':
                 acc = True
                 break
-            else:
-                self.buffer.append(text)
+            
+            self.buffer.append(text)
+            
+            text = self._rf_sock()
         
-        if(acc is True):
-            print('250 OK')
+        if acc is True:
+            self._so_sock('250 OK')
 
             for path in self.fpath:
                 # open or create a file for each path specified in RCPT TO
@@ -162,22 +190,41 @@ class ServerLoop():
                     fout.writelines(self.buffer)
             
             return (0, CMDOK)
-        else:
-            return (1, "whatever")
+        
+        return (1, "whatever")
 
     # takes a syntactically valid command and extracts the path
     def _get_path(self, cmd):
         return cmd[cmd.find('<')+1:cmd.find('>')]
 
+    # takes a path and extracts the domain name
     def _get_domain(self, cmd):
         return cmd[cmd.find('@')+1:]
-    
+
     def _echo(self, line):
         if line != "":
             print(line[:-1] if line[-1] == '\n' else line)
         # eof inputted exit
+        # TODO change behavoir to run indefinitely
         else:
             exit(0)
+    
+    # read data from the connection socket
+    def _rf_sock(self):
+        data = self.csock.recv(BUFSIZE)
+
+        if data == b'':
+            print("nothing recv'd")
+        
+        data = data.decode()
+
+        self._echo(data)
+
+        return data
+    
+    # send response code back over connection socket
+    def _so_sock(self, msg):
+        self.csock.send(msg.encode())
 
 if __name__ == "__main__":
     with open(0) as stdin:
