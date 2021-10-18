@@ -22,9 +22,15 @@ class CMDParser():
             elif self._stream[0] == "R":
                 self.cmd = 1
                 self._parse_rcpt_to_cmd()
-            else:
+            elif self._stream[0] == "D":
                 self.cmd = 2
                 self._parse_data_cmd()
+            elif self._stream[0] == "H":
+                self.cmd = 3
+                self._parse_hello_cmd()
+            elif self._stream[0] == "Q":
+                self.cmd = 4
+                self._parse_quit_cmd()
         except IndexError:
             self._fail_parse("empty-cmd")
             return
@@ -35,6 +41,24 @@ class CMDParser():
         self._stream = inputstr
         self.bad_token = ''
         self.status = 0
+    
+    def _parse_hello_cmd(self):
+        # <hello-cmd> --> HELO<whitespace><domain><nullspace><CRLF>
+        try:
+            assert self._stream[:4] == 'HELO'
+            self._shift(4)
+
+            self._parse_whitespace()
+
+            self._parse_domain()
+
+            self._parse_nullspace()
+
+            # handles <CRLF> prod
+            assert self._stream[0] == '\n'
+        except (AssertionError, IndexError):
+            self._fail_parse('hello-cmd')
+            return
 
     def _parse_mail_from_cmd(self):
         # parses a mail from command
@@ -88,7 +112,6 @@ class CMDParser():
         # parses only the data command
         # does not deal with the data that follows
         # <data-cmd> --> DATA<nullspace><CRLF>
-
         try:
             assert self._stream[:4] == 'DATA'
             self._shift(4)
@@ -98,6 +121,19 @@ class CMDParser():
             assert self._stream[0] == '\n'
         except (AssertionError, IndexError):
             self._fail_parse('data-cmd')
+            return
+    
+    def _parse_quit_cmd(self):
+        # <quit-cmd> --> QUIT<nullspace><CRLF>
+        try:
+            assert self._stream[:4] == 'QUIT'
+            self._shift(4)
+
+            self._parse_nullspace()
+
+            assert self._stream[0] == '\n'
+        except (AssertionError, IndexError):
+            self._fail_parse('quit-cmd')
             return
 
     def _parse_whitespace(self): # handles checking for <SP> as well
