@@ -32,7 +32,7 @@ BADORDER = '503'
 class ClientLoop():
     def __init__(self, hostname, portnum):
         self.msg_contents = None
-        # TODO replace this with server socket connection
+
         self.hname = hostname
         self.pnum = portnum
         self.servsock = None
@@ -42,12 +42,9 @@ class ClientLoop():
             (HELO, CMDOK):MF,
             (MF, CMDOK):RT,
             (RT, CMDOK):ERT,
-            (ERT, DATAPENDING):END,
+            (ERT, DATAPENDING):DATA,
             # does this directly transition into a quit state?
-            (DATA, CMDOK):USRIPT,
-            # TODO this transition may not longer be correct
-            # or necessary
-            (DATA, END):END,
+            (DATA, CMDOK):END,
             # erroneous ack codes recieved
             (MF, BADCMD):ERR,
             (RT, BADCMD):ERR,
@@ -222,6 +219,8 @@ class ClientLoop():
 
         rc = self._get_ack()
 
+        self.servsock.close()
+
         return (1, END)
     
     # read in the next input line
@@ -230,7 +229,7 @@ class ClientLoop():
 
     def _get_ack(self):
         ack = self.servsock.recv(BUFSIZE).decode()
-        # TODO delete vestigial printouts
+        # TODO delete vestigial printout
         errprint(ack)
 
         # recieved ack code must have the correct number

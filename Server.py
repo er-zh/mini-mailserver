@@ -3,6 +3,7 @@
 # PID: 730294463
 
 import socket
+from sys import argv
 from parse import CMDParser
 
 
@@ -31,16 +32,15 @@ BADPARAM = '501'
 BADORDER = '503'
 
 class ServerLoop():
-    def __init__(self, input_stream):
+    def __init__(self, port_num):
         self.parser = CMDParser()
-
-        self.cmdinput = input_stream
 
         self.fpath = set()
         self.buffer = []
         self.rcode = ''
 
         self.sock = None
+        self.pnum = port_num
         self.csock = None
         self.addr = None
 
@@ -51,10 +51,9 @@ class ServerLoop():
             (ERT, CMDOK):ERT,
             (ERT, DATAPENDING):DATA,
             (DATA, CMDOK):QUIT,
+            (QUIT, CONNECTTMN):WAIT
             # erroneous input recieved
             # ( / ), will be caught as exception
-            # quit states
-            (QUIT, CONNECTTMN):WAIT
         }
 
         self.call = {
@@ -69,7 +68,7 @@ class ServerLoop():
     def run(self):
         # creates a socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(('', PORTNUM))
+        self.sock.bind(('', self.pnum))
         self.sock.listen(MAX_CONNECTION_REQS)
 
         # starts the state machine
@@ -277,6 +276,9 @@ class ServerLoop():
         self.csock.send(msg.encode())
 
 if __name__ == "__main__":
-    with open(0) as stdin:
-        cli = ServerLoop(stdin)
+    if len(argv) < 2:
+        # not enough arguments
+        exit(1)
+    else:
+        cli = ServerLoop(int(argv[1]))
         cli.run()
