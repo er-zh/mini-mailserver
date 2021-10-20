@@ -42,10 +42,11 @@ class ClientLoop():
             (HELO, CMDOK):MF,
             (MF, CMDOK):RT,
             (RT, CMDOK):ERT,
-            (ERT, CMDOK):ERT,
-            (ERT, DATAPENDING):DATA,
-            (DATA, CMDOK):MF,
+            (ERT, DATAPENDING):END,
+            # does this directly transition into a quit state?
+            (DATA, CMDOK):USRIPT,
             # TODO this transition may not longer be correct
+            # or necessary
             (DATA, END):END,
             # erroneous ack codes recieved
             (MF, BADCMD):ERR,
@@ -68,6 +69,7 @@ class ClientLoop():
 
         self.call = {
             USRIPT:ClientLoop._get_user_input,
+            HELO:ClientLoop._send_hello,
             MF:ClientLoop._send_mailto,
             RT:ClientLoop._send_rcptto,
             ERT:ClientLoop._send_ercptto,
@@ -91,6 +93,8 @@ class ClientLoop():
                 cstate = self.transition[(cstate, rcode)]
             except KeyError:
                 cstate = ERR
+        
+        # TODO ConnectionRefusedErrors need to be accounted for
     
     # TODO quit on eof
     # TODO make this code neater
@@ -140,14 +144,12 @@ class ClientLoop():
                 msg.append(line)
                 line = stdin.readline()
 
-        self.msg_contents = (
+        self.msg_contents = [
             sender,
             recipients,
             subject,
             msg
-        )
-
-        print(self.msg_contents)
+        ]
 
         return (0, HELO)
 
@@ -170,37 +172,23 @@ class ClientLoop():
         return (0, self._get_ack())
 
     def _send_rcptto(self):
-        rcpt = self.msg_contents[1][0]
-        self.msg_contents[1] = self.msg_contents[1][1:]
-
-        cmd = f'RCPT TO: <{rcpt}>\n'
-        self.servsock.send(cmd.encode())
-
-        return (0, self._get_ack())
-
-    def _send_ercptto(self):
-        sent_rcpt = True
-        cmd = ''
-
-        if self.msg_contents[1] != []:
-            rcpt = self.msg_contents[1][0]
-            self.msg_contents[1] = self.msg_contents[1][1:]
+        ack = ''
+        for rcpt in self.msg_contents[1]:
             cmd = f'RCPT TO: <{rcpt}>\n'
-        else:
-            cmd = 'DATA\n'
-            sent_rcpt = False
+            self.servsock.send(cmd.encode())
 
-        self.servsock.send(cmd.encode())
+            ack = self._get_ack()
+            if ack != CMDOK:
+                break
+
+        return (0, ack)
+
+    # no longer needs to handle extra rcpt tos
+    # just needs to send DATA cmd
+    def _send_ercptto(self):
+        self.servsock.send('DATA\n'.encode())
         
-        ack = self._get_ack()
-        # need to manually identify that the correct ack has been recieved
-        # since the current state can't distinguish between whether it has successfully
-        # processed a data command or another rcpt to command
-        if (sent_rcpt and ack == CMDOK) or (not sent_rcpt and ack == DATAPENDING):
-            return (0, ack)
-        else:
-            # TODO figure out if there is something more appropriate to return here
-            return (0, ERR)
+        return (0, self._get_ack())
 
     def _send_data(self):
         # send the header of the email
@@ -208,7 +196,7 @@ class ClientLoop():
         self.servsock.send(msg.encode())
 
         msg = ''
-        for rcpt in self.msg_content[1]:
+        for rcpt in self.msg_contents[1]:
             msg += f'<{rcpt}>'
 
             self.servsock.send(msg.encode())
@@ -242,6 +230,7 @@ class ClientLoop():
 
     def _get_ack(self):
         ack = self.servsock.recv(BUFSIZE).decode()
+        # TODO delete vestigial printouts
         errprint(ack)
 
         # recieved ack code must have the correct number
@@ -265,7 +254,7 @@ if __name__ == "__main__":
         exit(1)
     else:
         serv_hostname = argv[1]
-        serv_portnum = argv[2]
+        serv_portnum = int(argv[2])
 
         cli = ClientLoop(serv_hostname, serv_portnum)
 

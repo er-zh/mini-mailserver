@@ -10,7 +10,7 @@ class CMDParser():
         self.remainder = ''
 
         self._stream = '' # holds remaining unparsed portion of the input string
-        self._invalid_chars = {' ', '\t', '<', '>', '(', ')', '[', ']', '\\', '.', ',', ';', ':', '@', '"'}
+        self._invalid_chars = {' ', '\t', '\n', '<', '>', '(', ')', '[', ']', '\\', '.', ',', ';', ':', '@', '"'}
 
     def parse(self, inputstr):
         self._start_parse(inputstr)
@@ -199,7 +199,9 @@ class CMDParser():
 
     def _parse_domain(self):
         # <domain> --> <element>(<null>|.<domain>)
-        self._parse_element()
+        # TODO which is it? parse string or element? the grammar is contradictory
+        #self._parse_element()
+        self._parse_string()
 
         try:
             if self._stream[0] == '.':

@@ -50,7 +50,7 @@ class ServerLoop():
             (RT, CMDOK):ERT,
             (ERT, CMDOK):ERT,
             (ERT, DATAPENDING):DATA,
-            (DATA, CMDOK):MF,
+            (DATA, CMDOK):QUIT,
             # erroneous input recieved
             # ( / ), will be caught as exception
             # quit states
@@ -84,6 +84,8 @@ class ServerLoop():
             except KeyError:
                 # if a error is recieved go back to the mail from state
                 cstate = QUIT
+
+        # need a try except for socket OSErrors
         
     def _waitfor_connection(self):
         self.csock, self.addr = self.sock.accept()
@@ -139,6 +141,8 @@ class ServerLoop():
         self.parser.parse(cmd)
 
         if self.parser.status == 0 and self.parser.cmd == 1:
+            # TODO is the server writing the recipients and senders extraneous now that
+            # the client sends that information in the header of the email?
             self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
             self.fpath.add(self._get_domain(self._get_path(cmd)))
             
@@ -191,9 +195,8 @@ class ServerLoop():
         acc = False
         text = self._rf_sock()
         while text != '':
-            # TODO delete unnecessary printouts
-            self._echo(text)
-            if text == '.\n':
+            if text[-3:] == '\n.\n':
+                self.buffer.append(text[:-2])
                 acc = True
                 break
             
@@ -263,6 +266,7 @@ class ServerLoop():
         
         data = data.decode()
 
+        # TODO delete unecessary printouts
         self._echo(data)
 
         return data
