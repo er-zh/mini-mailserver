@@ -14,8 +14,9 @@ USRIPT = "user input"
 HELO = "greet hello"
 MF = "mail from"
 RT = "rcpt to"
-ERT = "extra rcpt to"
-DATA = "data"
+ERT = "data cmd" # used to handle extra rcpt tos as well
+DATA = "send data"
+QUIT = "end connection"
 ERR = "error"
 END = "done"
 
@@ -37,31 +38,25 @@ class ClientLoop():
         self.pnum = portnum
         self.servsock = None
 
+        # only ref'd to report errors
+        self.cstate = ''
+        self.rc = ''
+
         self.transition = {
             (USRIPT, HELO):HELO,
             (HELO, CMDOK):MF,
             (MF, CMDOK):RT,
             (RT, CMDOK):ERT,
             (ERT, DATAPENDING):DATA,
-            # does this directly transition into a quit state?
-            (DATA, CMDOK):END,
+            # TODO does this directly transition into a quit state?
+            (DATA, CMDOK):QUIT,
+            (QUIT, CONNECTTMN):END,
             # erroneous ack codes recieved
-            (MF, BADCMD):ERR,
-            (RT, BADCMD):ERR,
-            (ERT, BADCMD):ERR,
-            (DATA, BADCMD):ERR,
-            (MF, BADPARAM):ERR,
-            (RT, BADPARAM):ERR,
-            (ERT, BADPARAM):ERR,
-            (DATA, BADPARAM):ERR,
-            (MF, BADORDER):ERR,
-            (RT, BADORDER):ERR,
-            (ERT, BADORDER):ERR,
-            (DATA, BADORDER):ERR,
+            # handled by keyError exception
+            (ERR, QUIT):QUIT,
             # once the end is reached there are
             # no more states to transition into
-            (END, END):'',
-            (ERR, END):''
+            (END, END):END
         }
 
         self.call = {
@@ -71,8 +66,9 @@ class ClientLoop():
             RT:ClientLoop._send_rcptto,
             ERT:ClientLoop._send_ercptto,
             DATA:ClientLoop._send_data,
-            END:ClientLoop._send_quit,
-            ERR:ClientLoop._send_quit
+            QUIT:ClientLoop._send_quit,
+            END:ClientLoop._finish_up,
+            ERR:ClientLoop._report_err
         }
         # all states will perform some action corresponding to
         # data read from the forwards file, then wait for an
@@ -81,15 +77,15 @@ class ClientLoop():
     def run(self):
         # start the state machine
         # initial state is expecting user input
-        cstate = USRIPT
+        self.cstate = USRIPT
         status = 0
         while status == 0:
-            status, rcode = self.call[cstate](self)
+            status, self.rc = self.call[self.cstate](self)
 
             try:
-                cstate = self.transition[(cstate, rcode)]
+                self.cstate = self.transition[(self.cstate, self.rc)]
             except KeyError:
-                cstate = ERR
+                self.cstate = ERR
         
         # TODO ConnectionRefusedErrors need to be accounted for
     
@@ -102,7 +98,7 @@ class ClientLoop():
             sender = stdin.readline().rstrip()
 
             while mb_check.match(sender) is None:
-                print(f'Sender mailbox has syntax error')
+                print('Sender mailbox has syntax error')
 
                 print('From:')
                 sender = stdin.readline().rstrip()
@@ -156,6 +152,8 @@ class ClientLoop():
         self.servsock.connect((self.hname, self.pnum))
 
         rc = self._get_ack()
+        if rc != '220':
+            return (0, rc)
 
         cmd = f'HELO {socket.gethostname()}\n'
         self.servsock.send(cmd.encode())
@@ -217,15 +215,29 @@ class ClientLoop():
     def _send_quit(self):
         self.servsock.send('QUIT\n'.encode())
 
-        rc = self._get_ack()
+        return (0, self._get_ack())
 
+    def _finish_up(self):
+        # shuts down the connection socket and return 1 to terminate the loop
         self.servsock.close()
 
         return (1, END)
-    
-    # read in the next input line
-    def _advance_read(self):
-        self.cline = self.ff.readline()
+
+    def _report_err(self):
+        msg = 'Got error in ' + self.cstate + ', '
+
+        if self.rc == BADCMD:
+            msg += 'malformed SMTP command issued'
+        elif self.rc == BADORDER:
+            msg += 'out of order SMTP command sent'
+        elif self.rc == BADPARAM:
+            msg += 'bad parameter(s) for issued command'
+        else:
+            msg += 'return code: ' + self.rc
+        
+        print(msg)
+
+        return(0, QUIT)
 
     def _get_ack(self):
         ack = self.servsock.recv(BUFSIZE).decode()

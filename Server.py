@@ -68,8 +68,11 @@ class ServerLoop():
     def run(self):
         # creates a socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(('', self.pnum))
-        self.sock.listen(MAX_CONNECTION_REQS)
+        try:
+            self.sock.bind(('', self.pnum))
+            self.sock.listen(MAX_CONNECTION_REQS)
+        except OSError:
+            print(f'Server socket establishment failed, perhaps the port number is already in use')
 
         # starts the state machine
         # entry state is reading for MAIL FROM cmd
