@@ -191,6 +191,7 @@ class ServerLoop():
         acc = False
         text = self._rf_sock()
         while text != '':
+            # TODO delete unnecessary printouts
             self._echo(text)
             if text == '.\n':
                 acc = True
@@ -256,6 +257,7 @@ class ServerLoop():
     def _rf_sock(self):
         data = self.csock.recv(BUFSIZE)
 
+        # TODO actually handle case where nothing is recv'd
         if data == b'':
             print("nothing recv'd")
         

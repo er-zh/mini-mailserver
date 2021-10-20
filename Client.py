@@ -1,5 +1,17 @@
+import socket
+import re
 from sys import argv, stderr
 
+# PORTNUM = 8000 + 4463
+BUFSIZE = 1024
+
+# regex for checking correct mailbox format
+mb_regex = r"^[0-9a-zA-z!#$%^&*`~_|?=+/-]+@[a-zA-Z][0-9a-zA-Z]*(?:.[a-zA-Z][0-9a-zA-Z]*)*$"
+mb_check = re.compile(mb_regex)
+
+# constants that label the states of the client program
+USRIPT = "user input"
+HELO = "greet hello"
 MF = "mail from"
 RT = "rcpt to"
 ERT = "extra rcpt to"
@@ -7,7 +19,9 @@ DATA = "data"
 ERR = "error"
 END = "done"
 
+# constants labeling the return codes
 CONNECTEST = '220'
+CONNECTTMN = '221'
 CMDOK = '250'
 DATAPENDING = '354'
 QUITREC = '221'
@@ -16,18 +30,22 @@ BADPARAM = '501'
 BADORDER = '503'
 
 class ClientLoop():
-    def __init__(self, forwardfile, inputstream):
-        self.ff = forwardfile
-        self.input = inputstream
-        self.cline = ''
-        self.eof_reached = False
+    def __init__(self, hostname, portnum):
+        self.msg_contents = None
+        # TODO replace this with server socket connection
+        self.hname = hostname
+        self.pnum = portnum
+        self.servsock = None
 
         self.transition = {
-            (MF, '250'):RT,
-            (RT, '250'):ERT,
-            (ERT, '250'):ERT,
-            (ERT, '354'):DATA,
-            (DATA, '250'):MF,
+            (USRIPT, HELO):HELO,
+            (HELO, CMDOK):MF,
+            (MF, CMDOK):RT,
+            (RT, CMDOK):ERT,
+            (ERT, CMDOK):ERT,
+            (ERT, DATAPENDING):DATA,
+            (DATA, CMDOK):MF,
+            # TODO this transition may not longer be correct
             (DATA, END):END,
             # erroneous ack codes recieved
             (MF, BADCMD):ERR,
@@ -38,6 +56,10 @@ class ClientLoop():
             (RT, BADPARAM):ERR,
             (ERT, BADPARAM):ERR,
             (DATA, BADPARAM):ERR,
+            (MF, BADORDER):ERR,
+            (RT, BADORDER):ERR,
+            (ERT, BADORDER):ERR,
+            (DATA, BADORDER):ERR,
             # once the end is reached there are
             # no more states to transition into
             (END, END):'',
@@ -45,6 +67,7 @@ class ClientLoop():
         }
 
         self.call = {
+            USRIPT:ClientLoop._get_user_input,
             MF:ClientLoop._send_mailto,
             RT:ClientLoop._send_rcptto,
             ERT:ClientLoop._send_ercptto,
@@ -57,7 +80,9 @@ class ClientLoop():
         # ack code
 
     def run(self):
-        cstate = MF
+        # start the state machine
+        # initial state is expecting user input
+        cstate = USRIPT
         status = 0
         while status == 0:
             status, rcode = self.call[cstate](self)
@@ -67,71 +92,147 @@ class ClientLoop():
             except KeyError:
                 cstate = ERR
     
-    # expects a well formed From: line in an email
+    # TODO quit on eof
+    # TODO make this code neater
+    def _get_user_input(self):
+        with open(0) as stdin:
+            # expects a single mailbox
+            print('From:')
+            sender = stdin.readline().rstrip()
+
+            while mb_check.match(sender) is None:
+                print(f'Sender mailbox has syntax error')
+
+                print('From:')
+                sender = stdin.readline().rstrip()
+
+            # expects one or more mailboxes, separated by a ","
+            # with an optional trailing space
+            stxerr = False
+            print('To:')
+            recipients = stdin.readline().split(',')
+            recipients = list(map(lambda a: a.rstrip().lstrip(), recipients))
+            for i, rcpt in enumerate(recipients, 1):
+                stxerr = mb_check.match(rcpt) is None
+                if stxerr:
+                    print(f'Recipient mailbox at position {i} has syntax error')
+                    break
+            
+            while stxerr:
+                print('To:')
+                recipients = stdin.readline().split(',')
+                recipients = list(map(lambda a: a.rstrip().lstrip(), recipients))
+                for i, rcpt in enumerate(recipients, 1):
+                    stxerr = mb_check.match(rcpt) is None
+                    if stxerr:
+                        print(f'Recipient mailbox at position {i} has syntax error')
+                        break
+
+            # get the message subject
+            print('Subject:')
+            subject = stdin.readline()
+
+            # get the message
+            print('Message:')
+            msg = []
+            line = stdin.readline()
+            while line != '.\n':
+                msg.append(line)
+                line = stdin.readline()
+
+        self.msg_contents = (
+            sender,
+            recipients,
+            subject,
+            msg
+        )
+
+        print(self.msg_contents)
+
+        return (0, HELO)
+
+    def _send_hello(self):
+        self.servsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        self.servsock.connect((self.hname, self.pnum))
+
+        rc = self._get_ack()
+
+        cmd = f'HELO {socket.gethostname()}\n'
+        self.servsock.send(cmd.encode())
+
+        return (0, self._get_ack())
+
     def _send_mailto(self):
-        # only need to get the next line if nothing
-        # has been read yet
-        if self.cline == '':
-            self._advance_read()
+        cmd = f'MAIL FROM: <{self.msg_contents[0]}>\n'
+        self.servsock.send(cmd.encode())
 
-        if self.cline[:5] == 'From:':
-            print('MAIL FROM:' + self.cline[5:], end='')
+        return (0, self._get_ack())
 
-            return (0, self._get_ack())
-        return (1, '')
-
-    # expects a well formed To: line in an email
-    # or can accept a data command
     def _send_rcptto(self):
-        self._advance_read()
+        rcpt = self.msg_contents[1][0]
+        self.msg_contents[1] = self.msg_contents[1][1:]
 
-        if self.cline[:3] == 'To:':
-            print('RCPT TO:'+ self.cline[3:], end='')
+        cmd = f'RCPT TO: <{rcpt}>\n'
+        self.servsock.send(cmd.encode())
 
-            return (0, self._get_ack())
-        return (1, '')
+        return (0, self._get_ack())
 
     def _send_ercptto(self):
-        self._advance_read()
-        got_rcpt = True
-        if self.cline[:3] == 'To:':
-            print('RCPT TO:'+ self.cline[3:], end='')
+        sent_rcpt = True
+        cmd = ''
+
+        if self.msg_contents[1] != []:
+            rcpt = self.msg_contents[1][0]
+            self.msg_contents[1] = self.msg_contents[1][1:]
+            cmd = f'RCPT TO: <{rcpt}>\n'
         else:
-            print('DATA')
-            got_rcpt = False
+            cmd = 'DATA\n'
+            sent_rcpt = False
+
+        self.servsock.send(cmd.encode())
         
         ack = self._get_ack()
         # need to manually identify that the correct ack has been recieved
         # since the current state can't distinguish between whether it has successfully
         # processed a data command or another rcpt to command
-        if (got_rcpt and ack == '250') or (not got_rcpt and ack == '354'):
+        if (sent_rcpt and ack == CMDOK) or (not sent_rcpt and ack == DATAPENDING):
             return (0, ack)
         else:
-            return (0, END)
+            # TODO figure out if there is something more appropriate to return here
+            return (0, ERR)
 
     def _send_data(self):
-        # does not need to advance read here
-        # bc email data was detected already but
-        # only a DATA command was issued
-        finished = True
-        while self.cline != '':
-            if self.cline[:5] == "From:":
-                finished = False
-                break
-            print(self.cline, end='')
-            
-            self._advance_read()
+        # send the header of the email
+        msg = f'From: <{self.msg_contents[0]}>\nTo: '
+        self.servsock.send(msg.encode())
 
-        print('.')
-        # if the while loop is exitted with ''
-        # then EOF has been encountered
-        if finished:
-            self._get_ack()
-            return(0, END)
+        msg = ''
+        for rcpt in self.msg_content[1]:
+            msg += f'<{rcpt}>'
+
+            self.servsock.send(msg.encode())
+            msg = ', '
+        
+        # subject input is not stripped, so msg_contents[2] should already have one
+        # newline at the end, thus only needs one more for the empty line delineating
+        # the header from the body of the email
+        msg = f'\nSubject: {self.msg_contents[2]}\n'
+        self.servsock.send(msg.encode())
+
+        # send the body of the email
+        for msg in self.msg_contents[3]:
+            self.servsock.send(msg.encode())
+
+        # end the data transmission
+        self.servsock.send('.\n'.encode())
+        
         return (0, self._get_ack())
     
     def _send_quit(self):
-        print('QUIT')
+        self.servsock.send('QUIT\n'.encode())
+
+        rc = self._get_ack()
 
         return (1, END)
     
@@ -140,7 +241,7 @@ class ClientLoop():
         self.cline = self.ff.readline()
 
     def _get_ack(self):
-        ack = self.input.readline()
+        ack = self.servsock.recv(BUFSIZE).decode()
         errprint(ack)
 
         # recieved ack code must have the correct number
@@ -148,6 +249,7 @@ class ClientLoop():
         # ie must follow <code><whitespace><*+><CRLF>
         try:
             if (ack[3] == ' ' or ack[3] == '\t') and ack[4:-1] != '':
+                # only the error code itself is returned
                 return ack[:3]
         except IndexError:
             pass
@@ -158,17 +260,13 @@ def errprint(line):
     print(line[:-1], file=stderr)
 
 if __name__ == "__main__":
-    if len(argv) < 2:
+    if len(argv) < 3:
         # insufficient args recieved
         exit(1)
     else:
-        forward_file = argv[1]
+        serv_hostname = argv[1]
+        serv_portnum = argv[2]
 
-    try:
-        with open(forward_file, 'r') as ff, open(0) as stdin:
-            cli = ClientLoop(ff, stdin)
+        cli = ClientLoop(serv_hostname, serv_portnum)
 
-            cli.run()
-    except FileNotFoundError:
-        # file name arg does not refer to a findable file
-        exit(2)
+        cli.run()
