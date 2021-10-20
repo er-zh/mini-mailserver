@@ -8,8 +8,7 @@ from parse import CMDParser
 
 
 # constant port number
-# TODO reimplement as an argument
-PORTNUM = 8000 + 4463
+# PORTNUM = 8000 + 4463
 MAX_CONNECTION_REQS = 1
 BUFSIZE = 1024
 
@@ -72,7 +71,8 @@ class ServerLoop():
             self.sock.bind(('', self.pnum))
             self.sock.listen(MAX_CONNECTION_REQS)
         except OSError:
-            print(f'Server socket establishment failed, perhaps the port number is already in use')
+            print('Server socket establishment failed, perhaps the port number is already in use')
+            return
 
         # starts the state machine
         # entry state is reading for MAIL FROM cmd
@@ -121,9 +121,7 @@ class ServerLoop():
 
         self.parser.parse(cmd)
 
-        if self.parser.status == 0 and self.parser.cmd == 0:
-            self.buffer.append(f'From: <{self._get_path(cmd)}>\n')
-            
+        if self.parser.status == 0 and self.parser.cmd == 0:            
             self._so_sock('250 OK')
             # return transition to rcpt to state
             return CMDOK
@@ -143,9 +141,6 @@ class ServerLoop():
         self.parser.parse(cmd)
 
         if self.parser.status == 0 and self.parser.cmd == 1:
-            # TODO is the server writing the recipients and senders extraneous now that
-            # the client sends that information in the header of the email?
-            self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
             self.fpath.add(self._get_domain(self._get_path(cmd)))
             
             self._so_sock('250 OK')
@@ -168,7 +163,6 @@ class ServerLoop():
 
         if self.parser.status == 0:
             if self.parser.cmd == 1:
-                self.buffer.append(f'To: <{self._get_path(cmd)}>\n')
                 self.fpath.add(self._get_domain(self._get_path(cmd)))
                 
                 self._so_sock('250 OK')
@@ -250,11 +244,11 @@ class ServerLoop():
     def _get_domain(self, cmd):
         return cmd[cmd.find('@')+1:]
 
+    # no longer used
     def _echo(self, line):
         if line != "":
             print(line[:-1] if line[-1] == '\n' else line)
         # eof inputted exit
-        # TODO change behavior to run indefinitely
         else:
             exit(0)
     
@@ -265,13 +259,8 @@ class ServerLoop():
         # TODO actually handle case where nothing is recv'd
         if data == b'':
             print("nothing recv'd")
-        
-        data = data.decode()
 
-        # TODO delete unecessary printouts
-        self._echo(data)
-
-        return data
+        return data.decode()
     
     # send response code back over connection socket
     def _so_sock(self, msg):

@@ -87,8 +87,6 @@ class ClientLoop():
             except KeyError:
                 self.cstate = ERR
         
-        # TODO ConnectionRefusedErrors need to be accounted for
-    
     # TODO quit on eof
     # TODO make this code neater
     def _get_user_input(self):
@@ -149,7 +147,11 @@ class ClientLoop():
     def _send_hello(self):
         self.servsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        self.servsock.connect((self.hname, self.pnum))
+        try:
+            self.servsock.connect((self.hname, self.pnum))
+        except ConnectionRefusedError:
+            print('Connection to mail server was refused')
+            return (1, '')
 
         rc = self._get_ack()
         if rc != '220':
@@ -241,8 +243,8 @@ class ClientLoop():
 
     def _get_ack(self):
         ack = self.servsock.recv(BUFSIZE).decode()
-        # TODO delete vestigial printout
-        errprint(ack)
+        # delete vestigial printout
+        #errprint(ack)
 
         # recieved ack code must have the correct number
         # in addition to being a well-formed message
